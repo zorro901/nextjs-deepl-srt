@@ -4,11 +4,11 @@ import Head from 'next/head'
 
 async function translateDeepL(arr: string[]) {
   const translateFinArray: string[][] = []
-
   for (const currentPromise of arr) {
     const retryRequest = async (count = 0) => {
       try {
-        const res = await axios.post('/api/deepl', {
+        // const res = await axios.post('/api/deepl', {
+        const res = await axios.post(`${process.env.TRANSLATE_URL}`, {
           text: currentPromise
         })
         translateFinArray.push(res.data.body)
