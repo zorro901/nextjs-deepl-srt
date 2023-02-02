@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-
-//モジュールを読み込み
-import chromium from 'playwright-aws-lambda'
+import * as playwright from 'playwright-aws-lambda'
+import type { Page } from 'playwright-core'
 
 const sliceByNumber = (array: string[], number: number): string[][] => {
   const length = Math.ceil(array.length / number)
@@ -17,6 +16,26 @@ const toZenWidth = (strVal: string) => {
   // 文字コードシフトで対応できない文字の変換
   return zenVal.replace(/"/g, '”').replace(/'/g, '’').replace(/`/g, '‘').replace(/\\/g, '￥').replace(/~/g, '〜')
 }
+
+const selectors = {
+  dialogDismiss: '[role=dialog] button[aria-label=Close]',
+  cookieBannerDismiss: '.dl_cookieBanner--buttonSelected',
+  translationActive: '.lmt:not(.lmt--active_translation_request)',
+  selectSourceLanguageButton: 'button[dl-test="translator-source-lang-btn"]',
+  selectTargetLanguageButton: 'button[dl-test="translator-target-lang-btn"]',
+  // sourceLanguageOption: (language: SourceLanguage) =>
+  //   `[dl-test="translator-source-lang-list"] [dl-test="translator-lang-option-${language}"]`,
+  // targetLanguageOption: (language: TargetLanguage) =>
+  //   `[dl-test="translator-target-lang-list"] [dl-test="translator-lang-option-${language}"]`,
+  sourceTextarea: '.lmt__source_textarea',
+  targetTextarea: '.lmt__target_textarea',
+  formalityToggler: '.lmt__formalitySwitch__toggler',
+  formalitySwitch: '.lmt__formalitySwitch',
+  formalitySwitchMenu: '.lmt__formalitySwitch__menu',
+  formalOption: '.lmt__formalitySwitch__menu_item_container:nth-child(1) .lmt__formalitySwitch__menu_item',
+  informalOption: '.lmt__formalitySwitch__menu_item_container:nth-child(2) .lmt__formalitySwitch__menu_item'
+}
+
 //Playwrightを実行
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   //JSONリクエストパラメータを取得する
@@ -28,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const text = wordlist.join('\n')
   //Puppeteerを準備する
   //高速化の為に余計なオプションはオフにしておく
-  const browser = await chromium.launchChromium({
+  const browser = await playwright.launchChromium({
     args: [
       '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
       '--autoplay-policy=user-gesture-required', // https://source.chromium.org/search?q=lang:cpp+symbol:kAutoplayPolicy&ss=chromium
@@ -86,46 +105,133 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // 改行した数を取得
   const indentionNumber = text.split('\n').length // 60
   // 文字数単位の空配列を生成する
-  const splitStringArray = Array(Math.ceil(text.length / 2900))
+  const splitTextArray = Array(Math.ceil(text.length / 2800))
   // 文章を配列に分割して再格納
-  const splitArrayNumber = sliceByNumber(text.split('\n'), indentionNumber / splitStringArray.length)
+  const splitArrayTextByNumber = sliceByNumber(text.split('\n'), indentionNumber / splitTextArray.length)
 
-  const resultArray = []
-  for (let i = 0; i < splitArrayNumber.length; i++) {
-    //翻訳元の言葉を入力
-    await page.fill('textarea', splitArrayNumber[i].join('\n'))
-    //翻訳を待つ
-    await page.waitForSelector('.lmt--active_translation_request', { state: 'hidden' })
-    //翻訳結果を取得する
-    const targetSentenceField = '.lmt__target_textarea'
+  // console.log(splitArrayTextByNumber.length)
+  // console.log(splitArrayTextByNumber[0].length)
+  // console.log(splitArrayTextByNumber[1].length)
+  // console.log(splitArrayTextByNumber[2].length)
+  // console.log(splitArrayTextByNumber[3].length)
+  // console.log(splitArrayTextByNumber[4].length)
 
-    const result: { target: string } = { target: '' }
-    result.target = await page.$eval(targetSentenceField, (el: HTMLTextAreaElement) => el.value)
+  const translatedTextArray: string[] = []
 
-    //改行された場合は分割する
-    const arr = result.target.split(/\r\n|\n/)
-    //分割した配列へ整形する
-    const arrSplit = () => {
-      const arrList = []
-      while (0 < arr.length) arrList.push(arr.splice(0, 1))
-      return arrList
-    }
-    //整形したデータを配列へ再格納
-    const arrComp = arrSplit()
-    resultArray.push(arrComp)
-    splitArrayNumber.length >= 2 ? await delay(10000) : null
+  const getSubtitleText = async ({
+    page,
+    targetText,
+    index,
+    maxLength
+  }: {
+    page: Page
+    targetText: string
+    index: number
+    maxLength: number
+  }) => {
+    await page.getByRole('textbox', { name: '原文' }).fill(targetText, { timeout: 60000 })
+    await page.waitForLoadState('networkidle')
+    const result = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
+    if (maxLength !== index) await delay(10000)
+    return result.split(/\r\n|\n/)
   }
 
+  // console.log(splitArrayTextByNumber.length)
+  // splitArrayTextByNumber[0].forEach(value => console.log(value))
+  // splitArrayTextByNumber[4].forEach(value => console.log(value))
+  // console.log(splitArrayTextByNumber[0].at(-1))
+  // console.log(splitArrayTextByNumber[4].at(-1))
+
+  const translate = async () => {
+    // const subtitleTextArray = await splitArrayTextByNumber
+    //   .flat()
+    //   .reduce(async (promisedString, targetText, index): Promise<string[]> => {
+    //     console.log(targetText)
+    //     const addSubArr = await getSubtitleText({
+    //       page,
+    //       // targetText: targetText.join('\n'),
+    //       targetText: targetText,
+    //       index,
+    //       maxLength: splitArrayTextByNumber.length
+    //     })
+    //     return [...(await promisedString), ...addSubArr]
+    //   }, Promise.resolve<string[]>([]))
+
+    const subtitleTextArray = splitArrayTextByNumber.map((targetText, index) => {
+      // console.log(targetText)
+      console.log(targetText.at(-1))
+      return new Promise(() =>
+        getSubtitleText({
+          page,
+          targetText: targetText.join('\n'),
+          index,
+          maxLength: splitArrayTextByNumber.length
+        })
+      )
+    })
+    // for (let i = 0; i < splitArrayTextByNumber.length; i++) {
+    //   translatedTextArray.push(...(await subtitleTextArray[i]))
+    // }
+    for await (const subtitleText of subtitleTextArray) {
+      // translatedTextArray = translatedTextArray.concat(subtitleText)
+      // translatedTextArray = [...translatedTextArray, ...subtitleText]
+      // console.log(subtitleText)
+      translatedTextArray.push(...subtitleText)
+    }
+  }
+  await translate()
+  const promiseArr = splitArrayTextByNumber.map((targetText, index) => {
+    return new Promise(resolve => {
+      resolve(
+        getSubtitleText({
+          page,
+          targetText: targetText.join('\n'),
+          index,
+          maxLength: splitArrayTextByNumber.length
+        })
+      )
+    })
+  })
+
+  const finishedSubtitleArray = []
+  // for (let i = 0; i < promiseArr.length; i++) {
+  //   finishedSubtitleArray.push(await promiseArr[i])
+  // }
+
+  // console.log('splitArrayTextByNumber[0].join')
+  // console.log(splitArrayTextByNumber[0][0].at(0))
+  // console.log(splitArrayTextByNumber[0][0].length)
+  // await page.getByRole('textbox', { name: '原文' }).fill(splitArrayTextByNumber[0][0], { timeout: 60000 })
+  // await page.waitForLoadState('networkidle')
+  // const result = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
+  // console.log(result)
+  // if (maxLength !== index) await delay(10000)
+  // return result.split(/\r\n|\n/)
+  // console.log(
+  //   await getSubtitleText({
+  //     page,
+  //     targetText: splitArrayTextByNumber[0][1],
+  //     index: 0,
+  //     maxLength: splitArrayTextByNumber.length
+  //   })
+  // )
+
+  // await translate()
   await browser.close()
-  const split = resultArray.flat()
+  console.log(translatedTextArray)
+  // translatedTextArray.forEach(value => console.log(value))
+  // console.log(wordObject)
   for (const [key, value] of Object.entries(wordObject)) {
     const nlCount = (value.match(/\n/g) || []).length
-    const word = []
-    for (let i = 0; i <= nlCount; i++) {
-      word.push(split[0])
-      split.shift()
-    }
-    wordObject[key] = word.join('\n')
+    // console.log(nlCount)
+    // const finishedSubtitleArray = []
+    // for (let i = 0; i <= nlCount; i++) {
+    //   finishedSubtitleArray.push(translatedTextArray[0])
+    //   // translatedTextArray.shift()
+    //   // word.push(translatedTextArray)
+    //   translatedTextArray.shift()
+    // }
+    wordObject[key] = translatedTextArray.join('\n')
   }
   res.status(200).json({ body: wordObject })
 }
