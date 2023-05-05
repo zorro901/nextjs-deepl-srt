@@ -2,15 +2,13 @@ version: "3.9"
 
 services:
   app:
-    build: .
-    environment:
-      - DEBUG=app:*
+    image: mcr.microsoft.com/playwright:v1.32.0-jammy
     tty: true
     ports:
       - '53005:3000'
     volumes:
       - ./:/app
     working_dir: /app
-    command: sh -c 'npm run dev'
+    command: sh -c 'npm i && npm run dev'
 #    command: tail -f /dev/null
     restart: always
