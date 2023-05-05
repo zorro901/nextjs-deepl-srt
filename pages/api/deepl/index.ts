@@ -1,7 +1,7 @@
 import { NextApiRequest, NextApiResponse } from 'next'
 
 //モジュールを読み込み
-import chromium from 'playwright-aws-lambda'
+import * as chromium from 'playwright-aws-lambda'
 
 const sliceByNumber = (array: string[], number: number): string[][] => {
   const length = Math.ceil(array.length / number)
@@ -69,7 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       '--ignore-ssl-errors',
       '--ignore-certificate-errors-spki-list'
     ],
-    headless: false
+    headless: true
   })
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -79,7 +79,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   })
   let langSetting = ''
   req.body.original && req.body.exchange ? (langSetting = `#${req.body.original}/${req.body.exchange}/`) : null
-
   //ページを開く
   await page.goto(`https://www.deepl.com/translator${langSetting}`)
 
@@ -93,39 +92,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const resultArray = []
   for (let i = 0; i < splitArrayNumber.length; i++) {
     //翻訳元の言葉を入力
-    await page.fill('textarea', splitArrayNumber[i].join('\n'))
+    await page.getByRole('textbox', { name: '原文' }).fill(splitArrayNumber[i].join('\n'))
+
     //翻訳を待つ
-    await page.waitForSelector('.lmt--active_translation_request', { state: 'hidden' })
+    try {
+      await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 2000 })
+    } catch (error) {
+      await page.waitForSelector('div[data-testid="translator-target-toolbar-share-popup"]', { state: 'attached' })
+    }
+
     //翻訳結果を取得する
     const targetSentenceField = '.lmt__target_textarea'
+    const pageContentTranslation = await page.$eval(targetSentenceField, (el: HTMLTextAreaElement) => el.value)
 
-    const result: { target: string } = { target: '' }
-    result.target = await page.$eval(targetSentenceField, (el: HTMLTextAreaElement) => el.value)
+    //改行されたテキストを配列に置き換える
+    //'Any Text\nAny Text' => [['Any Text'], ['Any Text']]
+    const stringArrayFromText = (resultText: string): string[][] => resultText.split(/\r?\n/).map(line => [line])
 
-    //改行された場合は分割する
-    const arr = result.target.split(/\r\n|\n/)
-    //分割した配列へ整形する
-    const arrSplit = () => {
-      const arrList = []
-      while (0 < arr.length) arrList.push(arr.splice(0, 1))
-      return arrList
-    }
-    //整形したデータを配列へ再格納
-    const arrComp = arrSplit()
-    resultArray.push(arrComp)
+    resultArray.push(stringArrayFromText(pageContentTranslation))
     splitArrayNumber.length >= 2 ? await delay(10000) : null
   }
 
   await browser.close()
-  const split = resultArray.flat()
+  const flattenedArray = resultArray.flat()
   for (const [key, value] of Object.entries(wordObject)) {
     const nlCount = (value.match(/\n/g) || []).length
-    const word = []
-    for (let i = 0; i <= nlCount; i++) {
-      word.push(split[0])
-      split.shift()
+    const words = flattenedArray.splice(0, nlCount + 1)
+    switch (key) {
+      case 'title':
+        wordObject.title = words.join('\n')
+        break
+      case 'description':
+        wordObject.description = words.join('\n')
+        break
+      case 'body':
+        wordObject.body = words.join('\n')
+        break
     }
-    wordObject[key] = word.join('\n')
+  }
+  // 要約後の改行を削除する
+  if (wordObject.body) {
+    wordObject.body = wordObject.body.trim()
   }
   res.status(200).json({ body: wordObject })
 }

@@ -1,13 +1,14 @@
 import type { NextPage } from 'next'
 import Head from 'next/head'
 import type { ChangeEvent } from 'react'
+import { useState } from 'react'
 
-const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text', string>> => {
+const translateDeepL = async (targetStringArray: string[]): Promise<Record<string, string>> => {
   const translateFinArray: Record<'text', string>[] = []
   for (const currentPromise of targetStringArray) {
     const retryRequest = async (retryCount = 0) => {
       try {
-        const response = await fetch('api/deepl', { method: 'POST', body: JSON.stringify({ text: currentPromise }) })
+        const response = await fetch('api/deepl', { method: 'POST', body: JSON.stringify({ body: currentPromise }) })
         if (!response.ok) return null
         const json = await response.json()
         translateFinArray.push(json.body)
@@ -42,10 +43,11 @@ const srtTranslate = async (srtFile: File) => {
 
     const beforeTranslateText = contentTextArray.filter(Boolean).join('\n')
     // 字幕データを翻訳する
-
     const translatedText = await translateDeepL([beforeTranslateText])
+
     // 翻訳した字幕を結合する
-    const translatedTextArray = translatedText.text.split('\n')
+    if (!translatedText) return
+    const translatedTextArray = translatedText.body.split('\n')
     const finishedSubtitleArray: string[] = []
 
     originalSubtitle.map((v, i) => {
@@ -85,23 +87,22 @@ const srtTranslate = async (srtFile: File) => {
   }
 }
 const Home: NextPage = () => {
-  const handleMultiUploadFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const loading = document.getElementById('loading')
-    const upload = document.getElementById('upload')
-    if (!loading || !upload) return
-    loading.classList.remove('hidden')
-    upload.classList.add('hidden')
+  const [isLoading, setIsLoading] = useState(false)
 
+  const handleMultiUploadFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    setIsLoading(true)
     const FileList = event.target.files
     if (!FileList) return
     const files = Array.from(FileList)
-
-    for (let i = 0; i < files.length; i++) {
-      await srtTranslate(files[i])
-      if (i === files.length - 1) {
-        loading.classList.add('hidden')
-        upload.classList.remove('hidden')
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await srtTranslate(files[i])
+        if (i === files.length - 1) {
+          setIsLoading(false)
+        }
       }
+    } catch (error) {
+      console.error(error)
     }
   }
   return (
@@ -113,27 +114,11 @@ const Home: NextPage = () => {
       </Head>
       <div className={'bg-gray-600 flex w-screen h-screen items-center flex-col pt-16'}>
         <div className={'container flex flex-col'}>
-          <h4 className={'flex justify-center font-bold text-white text-lg'}>SRT TRANSLATOR</h4>
+          <h4 className={'flex justify-center font-bold text-white text-lg mb-8'}>SRT TRANSLATOR</h4>
         </div>
 
-        <div className={'container flex flex-col w-full items-center py-16'}>
-          <div className='bg-grey-lighter' id={'upload'}>
-            <label className='w-64 flex flex-col items-center px-4 py-6 bg-white text-blue rounded-lg shadow-lg tracking-wide uppercase border border-blue cursor-pointer hover:bg-blue-100 hover:text-black'>
-              <svg className='w-8 h-8' fill='currentColor' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'>
-                <path d='M16.88 9.1A4 4 0 0 1 16 17H5a5 5 0 0 1-1-9.9V7a3 3 0 0 1 4.52-2.59A4.98 4.98 0 0 1 17 8c0 .38-.04.74-.12 1.1zM11 11h3l-4-4-4 4h3v3h2v-3z' />
-              </svg>
-              <span className='mt-2 text-base leading-normal'>Select a file</span>
-              <input
-                type='file'
-                className='hidden'
-                onChange={event => handleMultiUploadFile(event)}
-                accept='.srt,.vtt'
-                multiple
-              />
-            </label>
-          </div>
-
-          <div className={'flex flex-col w-full items-center hidden'} id={'loading'}>
+        {isLoading ? (
+          <div className={'flex flex-col w-full items-center'} id={'loading'}>
             <svg
               className='animate-spin h-1/2 w-1/2 text-white'
               xmlns='http://www.w3.org/2000/svg'
@@ -148,7 +133,25 @@ const Home: NextPage = () => {
               />
             </svg>
           </div>
-        </div>
+        ) : (
+          <div className={'container flex flex-col w-full items-center py-16'}>
+            <div className='bg-grey-lighter' id={'upload'}>
+              <label className='w-64 flex flex-col items-center px-4 py-6 bg-white text-blue rounded-lg shadow-lg tracking-wide uppercase border border-blue cursor-pointer hover:bg-blue-100 hover:text-black'>
+                <svg className='w-8 h-8' fill='currentColor' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'>
+                  <path d='M16.88 9.1A4 4 0 0 1 16 17H5a5 5 0 0 1-1-9.9V7a3 3 0 0 1 4.52-2.59A4.98 4.98 0 0 1 17 8c0 .38-.04.74-.12 1.1zM11 11h3l-4-4-4 4h3v3h2v-3z' />
+                </svg>
+                <span className='mt-2 text-base leading-normal'>Select a file</span>
+                <input
+                  type='file'
+                  className='hidden'
+                  onChange={event => handleMultiUploadFile(event)}
+                  accept='.srt,.vtt'
+                  multiple
+                />
+              </label>
+            </div>
+          </div>
+        )}
       </div>
     </>
   )
