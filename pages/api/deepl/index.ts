@@ -24,8 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     wordlist.push(`${toZenWidth(value)}`)
   }
   const text = wordlist.join('\n')
-  //Puppeteerを準備する
-  //高速化の為に余計なオプションはオフにしておく
+  // Playwrightを準備する
+  // 高速化の為に余計なオプションはオフにしておく
   const browser = await playwright.launchChromium({
     args: [
       '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
@@ -51,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       '--use-gl=swiftshader', // https://source.chromium.org/search?q=lang:cpp+symbol:kUseGl&ss=chromium
       '--window-size=1920,1080', // https://source.chromium.org/search?q=lang:cpp+symbol:kWindowSize&ss=chromium
 
-      //追加オプション
+      // 追加オプション
       '--disable-gpu',
       '--disable-dev-shm-usage',
       '--single-process',
@@ -71,14 +71,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   })
   const context = await browser.newContext()
   const page = await context.newPage()
-  //サイト側に日本語認識させるために設定
+  // サイト側に日本語認識させるために設定
   await page.setExtraHTTPHeaders({
     'Accept-Language': 'ja-JP'
   })
   let langSetting = ''
   req.body.original && req.body.exchange ? (langSetting = `#${req.body.original}/${req.body.exchange}/`) : null
 
-  //ページを開く
+  // ページを開く
   await page.goto(`https://www.deepl.com/translator${langSetting}`)
 
   // 改行した数を取得
@@ -90,19 +90,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const resultTranslatedTextArray: string[][] = []
   for (let i = 0; i < splitArrayTextByNumber.length; i++) {
-    //翻訳元の言葉を入力
+    // 翻訳元の言葉を入力
     const targetText = splitArrayTextByNumber[i].join('\n')
     await page.getByRole('textbox', { name: '原文' }).fill(targetText)
 
-    //翻訳を待つ
+    // 翻訳を待つ
     try {
       await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 2000 })
     } catch (error) {
       await page.waitForSelector('div[data-testid="translator-target-toolbar-share-popup"]', { state: 'attached' })
     }
 
-    await page.waitForSelector('.lmt--active_translation_request', { state: 'hidden' })
-    await page.waitForLoadState('networkidle')
     // 2回以上繰り返す場合は10秒待機
     if (splitArrayTextByNumber.length >= 2) await delay(10000)
     let translatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
