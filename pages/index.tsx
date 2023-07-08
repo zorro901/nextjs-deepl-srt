@@ -1,12 +1,12 @@
 import type { NextPage } from 'next'
 import Head from 'next/head'
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { srtTranslate } from '../utils/srt-translate'
 import Loading from './components/loading'
 
 const loadSrt = async (srtFile: File) => {
   const reader = new FileReader()
-  reader.readAsText(srtFile)
+  reader.readAsText(srtFile, 'UTF-8')
   await new Promise<void>(resolve => (reader.onload = () => resolve()))
   const targetSubtitle = typeof reader.result === 'string' ? reader.result : ''
   const finishedSubtitleArray = await srtTranslate({ targetSubtitle })
@@ -15,7 +15,10 @@ const loadSrt = async (srtFile: File) => {
   const file_type = fileName.split('.').pop()
 
   // 完成したデータを自動ダウンロード
-  const blob = new Blob([finishedSubtitleArray.join('\n')], { type: 'text/plain' })
+  const blob = new Blob([finishedSubtitleArray.join('\n')], {
+    type: 'text/plain;charset=utf-8',
+    endings: 'transparent'
+  })
   const url = URL.createObjectURL(blob)
   const anchorElement = document.createElement('a')
   document.body.appendChild(anchorElement)
@@ -38,7 +41,7 @@ const loadSrt = async (srtFile: File) => {
 const Home: NextPage = () => {
   const [isLoading, setIsLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const handleMultiUploadFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMultiUploadFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setIsLoading(true)
     event.preventDefault()
     const FileList = event.target.files
@@ -52,10 +55,9 @@ const Home: NextPage = () => {
       }
       setIsLoading(false)
     })()
-  }
-  const fileUpload = () => {
-    inputRef.current?.click()
-  }
+  }, [])
+  const fileUpload = () => inputRef.current?.click()
+
   return (
     <>
       <Head>
@@ -71,7 +73,7 @@ const Home: NextPage = () => {
           ) : (
             <>
               <div
-                onClick={() => fileUpload()}
+                onClick={fileUpload}
                 className='grid justify-items-center w-64 px-4 py-6 bg-white text-blue rounded-lg shadow-lg tracking-wide uppercase border border-blue cursor-pointer hover:bg-blue-100 hover:text-black'
               >
                 <svg className='w-8 h-8' fill='currentColor' xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'>
@@ -80,14 +82,7 @@ const Home: NextPage = () => {
                 <span className='mt-2 text-base leading-normal'>Select a file</span>
               </div>
               <label>
-                <input
-                  hidden
-                  type='file'
-                  ref={inputRef}
-                  onChange={event => handleMultiUploadFile(event)}
-                  accept='.srt,.vtt'
-                  multiple
-                />
+                <input hidden type='file' ref={inputRef} onChange={handleMultiUploadFile} accept='.srt,.vtt' multiple />
               </label>
             </>
           )}

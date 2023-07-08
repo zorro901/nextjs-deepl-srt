@@ -51,3 +51,18 @@ const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text
   }
   return translateFinArray[0]
 }
+
+export const sliceByNumber = (array: string[], number: number): string[][] => {
+  const length = Math.ceil(array.length / number)
+  return new Array(length).fill(undefined).map((_, i) => array.slice(i * number, (i + 1) * number))
+}
+export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+// 半角記号を全角へ変換
+export const toZenWidth = (strVal: string) => {
+  const zenVal = strVal.replaceAll(/[<>!@#$%^&*)(+=._-]/g, (tmpStr: string) =>
+    String.fromCharCode(tmpStr.charCodeAt(0) + 0xfee0)
+  )
+  // 文字コードシフトで対応できない文字の変換
+  return zenVal.replace(/"/g, '”').replace(/'/g, '’').replace(/`/g, '‘').replace(/\\/g, '￥').replace(/~/g, '〜')
+}

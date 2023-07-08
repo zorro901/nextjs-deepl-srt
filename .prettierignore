@@ -1,6 +1,6 @@
 node_modules
 .next
-yarn.lock
 package-lock.json
 public
 storybook-static
+next-env.d.ts

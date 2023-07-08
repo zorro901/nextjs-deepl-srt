@@ -2,3 +2,4 @@
 **/out/*
 **/.next/*
 storybook-static
+next-env.d.ts
