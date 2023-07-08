@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   app:
-    image: mcr.microsoft.com/playwright:v1.33.0-jammy
+    image: mcr.microsoft.com/playwright:v1.34.0-jammy
     environment:
       - DEBUG=app:*
     stdin_open: true

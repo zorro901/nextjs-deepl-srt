@@ -5,7 +5,6 @@ module.exports = {
     'plugin:react/recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:@typescript-eslint/eslint-recommended',
-    'plugin:prettier/recommended',
     'prettier'
   ],
   plugins: ['@typescript-eslint'],
@@ -19,20 +18,6 @@ module.exports = {
   rules: {
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/ban-ts-comment': 'off',
-    'prettier/prettier': [
-      'error',
-      {
-        arrowParens: 'avoid',
-        bracketSpacing: true,
-        printWidth: 120,
-        tabWidth: 2,
-        singleQuote: true,
-        jsxSingleQuote: true,
-        trailingComma: 'none',
-        semi: false,
-        parser: 'typescript'
-      }
-    ],
     'react/react-in-jsx-scope': 'off',
     'react/display-name': 'off',
     'react/prop-types': 'off',
