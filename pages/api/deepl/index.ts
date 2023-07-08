@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next'
-import * as playwright from 'playwright-aws-lambda'
+import { launchChromium } from 'playwright-aws-lambda'
 import { delay, sliceByNumber, toZenWidth } from '../../../utils/srt-translate'
 
 // Playwrightを実行
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Playwrightを準備する
     // 高速化のために余計なオプションはオフにしておく
-    const browser = await playwright.launchChromium({
+    const browser = await launchChromium({
       args: [
         '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
         '--autoplay-policy=user-gesture-required', // https://source.chromium.org/search?q=lang:cpp+symbol:kAutoplayPolicy&ss=chromium
