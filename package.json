@@ -10,7 +10,7 @@
     "lint:fix": "eslint --fix . --ext .ts,.js,.tsx,.jsx",
     "format": "prettier --write .",
     "prepare": "husky install",
-    "postinstall": "npx force-resolutions"
+    "postinstall": "npx -y force-resolutions && npx playwright install --with-deps chromium"
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx}": [
@@ -39,7 +39,6 @@
     "husky": "^8.0.3",
     "lint-staged": "^13.2.3",
     "playwright": "^1.35.1",
-    "playwright-aws-lambda": "^0.10.0",
     "playwright-core": "^1.35.1",
     "postcss": "^8.4.25",
     "prettier": "^3.0.0",

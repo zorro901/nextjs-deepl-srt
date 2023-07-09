@@ -38,10 +38,13 @@ const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text
   for (const currentPromise of targetStringArray) {
     const retryRequest = async (retryCount = 0) => {
       try {
-        const response = await fetch('api/deepl', { method: 'POST', body: JSON.stringify({ text: currentPromise }) })
+        const response = await fetch('api/deepl', {
+          method: 'POST',
+          body: JSON.stringify({ text: currentPromise, original: 'en', exchange: 'ja' })
+        })
         if (!response.ok) return null
-        const json = await response.json()
-        translateFinArray.push(json.body)
+        const translatedText: { text: string } = await response.json()
+        translateFinArray.push(translatedText)
       } catch (error) {
         if (retryCount === 4) return null
         await retryRequest(retryCount + 1)

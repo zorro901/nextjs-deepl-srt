@@ -1,18 +1,19 @@
-import { NextApiRequest, NextApiResponse } from 'next'
-import { launchChromium } from 'playwright-aws-lambda'
-import { delay, sliceByNumber, toZenWidth } from '../../../utils/srt-translate'
+import { NextResponse } from 'next/server'
+import { chromium } from 'playwright'
+import { delay, sliceByNumber, toZenWidth } from 'utils/srt-translate'
 
-// Playwrightを実行
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export async function POST(req: Request) {
   try {
     // JSONリクエストパラメータを取得する
-    const originalText: Record<string, string> = JSON.parse(req.body)
-    const wordlist = Object.values(originalText).map(toZenWidth)
+    const reqBody: Record<'text' | 'original' | 'exchange', string> = await req.json()
+    const originalText = reqBody.text
+    const { exchange, original } = reqBody
+    const wordlist = toZenWidth(originalText.split('\n').join('\n')).split('\n')
     const text = wordlist.join('\n')
 
     // Playwrightを準備する
     // 高速化のために余計なオプションはオフにしておく
-    const browser = await launchChromium({
+    const browser = await chromium.launch({
       args: [
         '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
         '--autoplay-policy=user-gesture-required', // https://source.chromium.org/search?q=lang:cpp+symbol:kAutoplayPolicy&ss=chromium
@@ -62,8 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       'Accept-Language': 'ja-JP'
     })
 
-    const langSetting = req.body.original && req.body.exchange ? `#${req.body.original}/${req.body.exchange}/` : ''
-
+    const langSetting = original && exchange ? `#${original}/${exchange}/` : ''
     // ページを開く
     await page.goto(`https://www.deepl.com/translator${langSetting}`)
 
@@ -113,13 +113,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await page.close()
     await context.close()
     await browser.close()
-    // キー別にテキストを分割して翻訳済みのテキストに置き換え
-    for (const key of Object.keys(originalText)) {
-      originalText[key] = resultTranslatedTextArray.flat().join('\n')
-    }
 
-    res.status(200).json({ body: originalText })
+    const resultText = resultTranslatedTextArray.flat().join('\n')
+
+    return NextResponse.json({ text: resultText }, { status: 200 })
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' })
+    return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
   }
 }
