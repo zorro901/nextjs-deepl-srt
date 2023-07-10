@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     // 改行した数を取得
     const indentionNumber = text.split('\n').length // 60
     // 文字数単位の空配列を生成する
-    const splitTextNumber = 1450
+    const splitTextNumber = 1700
     const splitTextArray = Array(Math.ceil(text.length / splitTextNumber))
     // 文章を配列に分割して再格納
     const splitArrayTextByNumber = sliceByNumber(text.split('\n'), indentionNumber / splitTextArray.length)
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
 
       // 翻訳を待つ
       try {
-        await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 2000 })
+        await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 3000 })
       } catch (error) {
         await page.waitForSelector('div[data-testid="translator-target-toolbar-share-popup"]', { state: 'attached' })
       }
@@ -95,21 +95,25 @@ export async function POST(req: Request) {
       let translatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
 
       // テキストが取得できなかった場合に再取得する
-      const retryGetSentenceArray = async () => {
-        if (translatedText.length === 0) {
+      const maxRetries = 10 // 最大リトライ回数
+
+      const retryGetSentenceArray = async (retryCount: number) => {
+        if (translatedText.length === 0 && retryCount < maxRetries) {
           translatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
           await delay(1000)
-          await retryGetSentenceArray()
+          await retryGetSentenceArray(retryCount + 1) // リトライ回数をインクリメントして再試行
         }
       }
-      await retryGetSentenceArray()
+
+      await retryGetSentenceArray(0) // リトライ回数を0で初期化して実行
 
       // 改行区切りの文字列配列に加工
       resultTranslatedTextArray.push(translatedText.split(/\r\n|\n/).map(sentence => sentence))
 
-      // テキストをクリアするためリロード
-      await page.reload()
+      // テキストをクリア
+      await page.getByTestId('translator-source-clear-button').click()
     }
+
     await page.close()
     await context.close()
     await browser.close()
