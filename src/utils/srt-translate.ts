@@ -41,7 +41,7 @@ export const srtTranslate = async ({ targetSubtitle }: { targetSubtitle: string 
     if (curr[2] !== '') {
       acc.push(curr)
       return acc
-    } else if (currentIndex < array.length - 1) {
+    } else if (currentIndex < array.length - 1 && array[currentIndex + 1].length > 1) {
       const previousStartTime = acc[acc.length - 1][1].split(' --> ')[0]
       const nextStartTime = array[currentIndex + 1][1].split(' --> ')[0]
       acc[acc.length - 1][1] = `${previousStartTime} --> ${nextStartTime}`
