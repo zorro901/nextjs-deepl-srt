@@ -2,6 +2,33 @@ import { NextResponse } from 'next/server'
 import { chromium } from 'playwright'
 import { delay, sliceByNumber, toZenWidth } from 'utils/srt-translate'
 
+const separatedText = (textArray: string[]) => {
+  const updatedArray: string[] = []
+  let nextFlg = false
+  let blankCount = 1
+
+  for (const text of textArray) {
+    if (text.endsWith('．')) {
+      if (nextFlg) {
+        updatedArray[updatedArray.length - 1] += ` ${text}`
+        const blankArray: string[] = Array(blankCount).fill('')
+        updatedArray.push(...blankArray)
+        blankCount = 1
+      } else {
+        updatedArray.push(text)
+      }
+      nextFlg = false
+    } else if (nextFlg) {
+      updatedArray[updatedArray.length - 1] += ` ${text}`
+      blankCount++
+    } else {
+      updatedArray.push(text)
+      nextFlg = true
+    }
+  }
+  return updatedArray
+}
+
 export async function POST(req: Request) {
   try {
     // JSONリクエストパラメータを取得する
@@ -70,7 +97,7 @@ export async function POST(req: Request) {
     // 改行した数を取得
     const indentionNumber = text.split('\n').length // 60
     // 文字数単位の空配列を生成する
-    const splitTextNumber = 1700
+    const splitTextNumber = 1500
     const splitTextArray = Array(Math.ceil(text.length / splitTextNumber))
     // 文章を配列に分割して再格納
     const splitArrayTextByNumber = sliceByNumber(text.split('\n'), indentionNumber / splitTextArray.length)
@@ -78,8 +105,9 @@ export async function POST(req: Request) {
     const resultTranslatedTextArray: string[][] = []
     for (let i = 0; i < splitArrayTextByNumber.length; i++) {
       // 翻訳元の言葉を入力
-      const targetText = splitArrayTextByNumber[i].join('\n')
-      await page.getByRole('textbox', { name: '原文' }).fill(targetText)
+      const targetTextArray = separatedText(splitArrayTextByNumber[i])
+      const targetLineNumber = splitArrayTextByNumber[i].length
+      await page.getByRole('textbox', { name: '原文' }).fill(targetTextArray.join('\n'))
 
       // 翻訳を待つ
       try {
@@ -93,7 +121,7 @@ export async function POST(req: Request) {
 
       // 翻訳されたテキストを取得
       let translatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
-
+      await page.getByRole('textbox', { name: '訳文' }).fill('')
       // テキストが取得できなかった場合に再取得する
       const maxRetries = 10 // 最大リトライ回数
 
@@ -107,8 +135,48 @@ export async function POST(req: Request) {
 
       await retryGetSentenceArray(0) // リトライ回数を0で初期化して実行
 
-      // 改行区切りの文字列配列に加工
-      resultTranslatedTextArray.push(translatedText.split(/\r\n|\n/).map(sentence => sentence))
+      // 翻訳後のテキストに重複行があった場合に残りを再翻訳する
+      const translatedTextArray = translatedText.split(/\r\n|\n/)
+      const retryOriginalTextArray: string[] = []
+      let foundDuplicate = false
+      let lineCount = 0
+      for (const text of translatedTextArray) {
+        if (!foundDuplicate && retryOriginalTextArray.includes(text) && text !== '') {
+          foundDuplicate = true
+          retryOriginalTextArray.length = 0
+          retryOriginalTextArray.push(text)
+          lineCount--
+        }
+        if (!foundDuplicate) lineCount++
+        retryOriginalTextArray.push(text)
+      }
+
+      if (foundDuplicate) {
+        const spliceLineNumber = lineCount
+        targetTextArray.splice(0, spliceLineNumber)
+        translatedTextArray.splice(spliceLineNumber)
+        await page.getByTestId('translator-source-clear-button').click()
+        await page.getByRole('textbox', { name: '原文' }).fill(targetTextArray.join('\n'))
+        // 翻訳を待つ
+        try {
+          await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 3000 })
+        } catch (error) {
+          await page.waitForSelector('div[data-testid="translator-target-toolbar-share-popup"]', { state: 'attached' })
+        }
+        const retryTranslatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
+        const joinedTranslatedTextArray = [...translatedTextArray, ...retryTranslatedText.split(/\r\n|\n/)]
+
+        const maxLength = Math.max(joinedTranslatedTextArray.length, targetLineNumber)
+        const normalizedArray = joinedTranslatedTextArray.concat(
+          Array(maxLength - joinedTranslatedTextArray.length).fill('')
+        )
+        resultTranslatedTextArray.push(normalizedArray)
+      } else {
+        // 改行区切りの文字列配列に加工
+        const maxLength = Math.max(translatedTextArray.length, targetLineNumber)
+        const normalizedArray = translatedTextArray.concat(Array(maxLength - translatedTextArray.length).fill(''))
+        resultTranslatedTextArray.push(normalizedArray)
+      }
 
       // テキストをクリア
       await page.getByTestId('translator-source-clear-button').click()

@@ -19,18 +19,38 @@ export const srtTranslate = async ({ targetSubtitle }: { targetSubtitle: string 
   const translatedText = await translateDeepL([beforeTranslateText])
   // 翻訳した字幕を結合する
   const translatedTextArray = translatedText.text.split('\n')
-  const finishedSubtitleArray: string[] = []
+  const subtitleArray: string[] = []
 
   originalSubtitle.map((subtitleData, index) => {
     if (index === contentArrayIndex[0]) {
-      finishedSubtitleArray.push(translatedTextArray[0])
+      subtitleArray.push(translatedTextArray[0])
       translatedTextArray.shift()
       contentArrayIndex.shift()
     } else {
-      finishedSubtitleArray.push(subtitleData)
+      subtitleArray.push(subtitleData)
     }
   })
-  return finishedSubtitleArray
+
+  // 空の字幕情報を詰める
+  const groupedSubtitleArray: string[][] = []
+  for (let i = 0; i < subtitleArray.length; i += 4) {
+    const group = subtitleArray.slice(i, i + 4)
+    groupedSubtitleArray.push(group)
+  }
+  const incrementedArray = groupedSubtitleArray.reduce((acc, curr, currentIndex, array) => {
+    if (curr[2] !== '') {
+      acc.push(curr)
+      return acc
+    } else if (currentIndex < array.length - 1) {
+      const previousStartTime = acc[acc.length - 1][1].split(' --> ')[0]
+      const nextStartTime = array[currentIndex + 1][1].split(' --> ')[0]
+      acc[acc.length - 1][1] = `${previousStartTime} --> ${nextStartTime}`
+      return acc
+    }
+    return acc
+  }, [] as string[][])
+
+  return incrementedArray.flat()
 }
 
 const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text', string>> => {
