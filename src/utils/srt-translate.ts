@@ -1,7 +1,39 @@
+export const webVttTrim = (subtitleArray: string[]) => {
+  const result: string[] = []
+  let temp = ''
+  subtitleArray.forEach(element => {
+    if (element === '') {
+      result.push(temp.trim())
+      result.push('')
+      temp = ''
+    } else if (!isNaN(Number(element))) {
+      result.push(element)
+    } else if (element.includes('-->')) {
+      result.push(element)
+    } else {
+      temp += ` ${element}`
+    }
+  })
+  while (result[result.length - 1] === '') {
+    result.pop()
+  }
+  result.push(temp.trim())
+
+  if (result[0] === 'WEBVTT') {
+    const targetIndex = result.findIndex(v => v === '1')
+    result.splice(0, targetIndex)
+    return result
+  }
+
+  return result
+}
+
 export const srtTranslate = async ({ targetSubtitle }: { targetSubtitle: string }) => {
   // 字幕を展開する
-  const originalSubtitle: Array<string> = targetSubtitle.replace(/\r/g, '').split('\n')
+  const originalSubtitle: Array<string> = webVttTrim(targetSubtitle.replace(/\r/g, '').split('\n'))
 
+  const targetIndex = originalSubtitle.findIndex(v => v === '1')
+  originalSubtitle.splice(0, targetIndex)
   // 字幕の並び順と内容を配列に変換する
   const contentArrayIndex: number[] = []
   const contentTextArray = originalSubtitle.map((text, index) => {
@@ -31,26 +63,7 @@ export const srtTranslate = async ({ targetSubtitle }: { targetSubtitle: string 
     }
   })
 
-  // 空の字幕情報を詰める
-  const groupedSubtitleArray: string[][] = []
-  for (let i = 0; i < subtitleArray.length; i += 4) {
-    const group = subtitleArray.slice(i, i + 4)
-    groupedSubtitleArray.push(group)
-  }
-  const incrementedArray = groupedSubtitleArray.reduce((acc, curr, currentIndex, array) => {
-    if (curr[2] !== '') {
-      acc.push(curr)
-      return acc
-    } else if (currentIndex < array.length - 1 && array[currentIndex + 1].length > 1) {
-      const previousStartTime = acc[acc.length - 1][1].split(' --> ')[0]
-      const nextStartTime = array[currentIndex + 1][1].split(' --> ')[0]
-      acc[acc.length - 1][1] = `${previousStartTime} --> ${nextStartTime}`
-      return acc
-    }
-    return acc
-  }, [] as string[][])
-
-  return incrementedArray.flat()
+  return subtitleArray
 }
 
 const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text', string>> => {

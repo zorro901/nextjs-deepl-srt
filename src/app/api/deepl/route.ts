@@ -2,33 +2,6 @@ import { NextResponse } from 'next/server'
 import { chromium } from 'playwright'
 import { delay, sliceByNumber, toZenWidth } from 'utils/srt-translate'
 
-const separatedText = (textArray: string[]) => {
-  const updatedArray: string[] = []
-  let nextFlg = false
-  let blankCount = 1
-
-  for (const text of textArray) {
-    if (text.endsWith('．')) {
-      if (nextFlg) {
-        updatedArray[updatedArray.length - 1] += ` ${text}`
-        const blankArray: string[] = Array(blankCount).fill('')
-        updatedArray.push(...blankArray)
-        blankCount = 1
-      } else {
-        updatedArray.push(text)
-      }
-      nextFlg = false
-    } else if (nextFlg) {
-      updatedArray[updatedArray.length - 1] += ` ${text}`
-      blankCount++
-    } else {
-      updatedArray.push(text)
-      nextFlg = true
-    }
-  }
-  return updatedArray
-}
-
 export async function POST(req: Request) {
   try {
     // JSONリクエストパラメータを取得する
@@ -105,7 +78,7 @@ export async function POST(req: Request) {
     const resultTranslatedTextArray: string[][] = []
     for (let i = 0; i < splitArrayTextByNumber.length; i++) {
       // 翻訳元の言葉を入力
-      const targetTextArray = separatedText(splitArrayTextByNumber[i])
+      const targetTextArray = splitArrayTextByNumber[i]
       const targetLineNumber = splitArrayTextByNumber[i].length
       await page.getByRole('textbox', { name: '原文' }).fill(targetTextArray.join('\n'))
 
