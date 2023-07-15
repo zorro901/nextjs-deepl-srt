@@ -79,7 +79,7 @@ export async function POST(req: Request) {
     for (let i = 0; i < splitArrayTextByNumber.length; i++) {
       // 翻訳元の言葉を入力
       const targetTextArray = splitArrayTextByNumber[i]
-      const targetLineNumber = splitArrayTextByNumber[i].length
+      const sourceLineCount = splitArrayTextByNumber[i].length
       await page.getByRole('textbox', { name: '原文' }).fill(targetTextArray.join('\n'))
 
       // 翻訳を待つ
@@ -108,24 +108,21 @@ export async function POST(req: Request) {
 
       await retryGetSentenceArray(0) // リトライ回数を0で初期化して実行
 
-      // 翻訳後のテキストに重複行があった場合に残りを再翻訳する
-      const translatedTextArray = translatedText.split(/\r\n|\n/)
-      const retryOriginalTextArray: string[] = []
-      let foundDuplicate = false
-      let lineCount = 0
-      for (const text of translatedTextArray) {
-        if (!foundDuplicate && retryOriginalTextArray.includes(text) && text !== '') {
-          foundDuplicate = true
-          retryOriginalTextArray.length = 0
-          retryOriginalTextArray.push(text)
-          lineCount--
-        }
-        if (!foundDuplicate) lineCount++
-        retryOriginalTextArray.push(text)
+      const findFirstSimilarIndex = (arr: string[]): number => {
+        const lastIndex = arr.length - 1
+        const firstSimilarIndex = arr.findIndex((element, index) => {
+          if (index === lastIndex) return false
+          return arr.slice(index + 1).some(otherElement => element.slice(0, -1) === otherElement.slice(0, -1))
+        })
+        return firstSimilarIndex === 0 ? -1 : firstSimilarIndex
       }
 
-      if (foundDuplicate) {
-        const spliceLineNumber = lineCount
+      // 翻訳後のテキストに重複行があった場合に残りを再翻訳する
+      const translatedTextArray = translatedText.split(/\r\n|\n/)
+      const firstSimilarIndex = findFirstSimilarIndex(translatedTextArray)
+
+      if (firstSimilarIndex !== -1) {
+        const spliceLineNumber = firstSimilarIndex
         targetTextArray.splice(0, spliceLineNumber)
         translatedTextArray.splice(spliceLineNumber)
         await page.getByTestId('translator-source-clear-button').click()
@@ -139,14 +136,14 @@ export async function POST(req: Request) {
         const retryTranslatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
         const joinedTranslatedTextArray = [...translatedTextArray, ...retryTranslatedText.split(/\r\n|\n/)]
 
-        const maxLength = Math.max(joinedTranslatedTextArray.length, targetLineNumber)
+        const maxLength = Math.max(joinedTranslatedTextArray.length, sourceLineCount)
         const normalizedArray = joinedTranslatedTextArray.concat(
           Array(maxLength - joinedTranslatedTextArray.length).fill('')
         )
         resultTranslatedTextArray.push(normalizedArray)
       } else {
         // 改行区切りの文字列配列に加工
-        const maxLength = Math.max(translatedTextArray.length, targetLineNumber)
+        const maxLength = Math.max(translatedTextArray.length, sourceLineCount)
         const normalizedArray = translatedTextArray.concat(Array(maxLength - translatedTextArray.length).fill(''))
         resultTranslatedTextArray.push(normalizedArray)
       }
