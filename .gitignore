@@ -36,5 +36,14 @@ yarn-error.log*
 # idea
 /.idea/
 
-# idea
+# yarn
 .yarn.lock
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# enviroment file
+.env
