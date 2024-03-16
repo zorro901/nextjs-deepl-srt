@@ -1,71 +1,15 @@
 import { NextResponse } from 'next/server'
-import { chromium } from 'playwright'
 import { delay, sliceByNumber, toZenWidth } from 'utils/srt-translate'
+import { env } from '../../../env/server'
 
+const DELAY_MS = 5000
 export async function POST(req: Request) {
   try {
     // JSONリクエストパラメータを取得する
     const reqBody: Record<'text' | 'original' | 'exchange', string> = await req.json()
     const originalText = reqBody.text
-    const { exchange, original } = reqBody
     const wordlist = toZenWidth(originalText.split('\n').join('\n')).split('\n')
     const text = wordlist.join('\n')
-
-    // Playwrightを準備する
-    // 高速化のために余計なオプションはオフにしておく
-    const browser = await chromium.launch({
-      args: [
-        '--allow-running-insecure-content', // https://source.chromium.org/search?q=lang:cpp+symbol:kAllowRunningInsecureContent&ss=chromium
-        '--autoplay-policy=user-gesture-required', // https://source.chromium.org/search?q=lang:cpp+symbol:kAutoplayPolicy&ss=chromium
-        '--disable-component-update', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableComponentUpdate&ss=chromium
-        '--disable-domain-reliability', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableDomainReliability&ss=chromium
-        '--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process', // https://source.chromium.org/search?q=file:content_features.cc&ss=chromium
-        '--disable-print-preview', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisablePrintPreview&ss=chromium
-        '--disable-setuid-sandbox', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSetuidSandbox&ss=chromium
-        '--disable-site-isolation-trials', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSiteIsolation&ss=chromium
-        '--disable-speech-api', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableSpeechAPI&ss=chromium
-        '--disable-web-security', // https://source.chromium.org/search?q=lang:cpp+symbol:kDisableWebSecurity&ss=chromium
-        '--disk-cache-size=33554432', // https://source.chromium.org/search?q=lang:cpp+symbol:kDiskCacheSize&ss=chromium
-        '--enable-features=SharedArrayBuffer', // https://source.chromium.org/search?q=file:content_features.cc&ss=chromium
-        '--hide-scrollbars', // https://source.chromium.org/search?q=lang:cpp+symbol:kHideScrollbars&ss=chromium
-        '--ignore-gpu-blocklist', // https://source.chromium.org/search?q=lang:cpp+symbol:kIgnoreGpuBlocklist&ss=chromium
-        '--in-process-gpu', // https://source.chromium.org/search?q=lang:cpp+symbol:kInProcessGPU&ss=chromium
-        '--mute-audio', // https://source.chromium.org/search?q=lang:cpp+symbol:kMuteAudio&ss=chromium
-        '--no-default-browser-check', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoDefaultBrowserCheck&ss=chromium
-        '--no-pings', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoPings&ss=chromium
-        '--no-sandbox', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoSandbox&ss=chromium
-        '--no-zygote', // https://source.chromium.org/search?q=lang:cpp+symbol:kNoZygote&ss=chromium
-        '--use-gl=swiftshader', // https://source.chromium.org/search?q=lang:cpp+symbol:kUseGl&ss=chromium
-        '--window-size=1920,1080', // https://source.chromium.org/search?q=lang:cpp+symbol:kWindowSize&ss=chromium
-
-        // 追加オプション
-        '--disable-gpu',
-        '--disable-dev-shm-usage',
-        '--disable-background-networking',
-        '--disable-default-apps',
-        '--disable-extensions',
-        '--disable-sync',
-        '--disable-translate',
-        '--metrics-recording-only',
-        '--no-first-run',
-        '--safebrowsing-disable-auto-update',
-        '--ignore-certificate-errors',
-        '--ignore-ssl-errors',
-        '--ignore-certificate-errors-spki-list'
-      ],
-      headless: true
-    })
-    const context = await browser.newContext()
-    const page = await context.newPage()
-
-    // サイト側に日本語認識させるために設定
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'ja-JP'
-    })
-
-    const langSetting = original && exchange ? `#${original}/${exchange}/` : ''
-    // ページを開く
-    await page.goto(`https://www.deepl.com/translator${langSetting}`)
 
     // 改行した数を取得
     const indentionNumber = text.split('\n').length // 60
@@ -80,86 +24,73 @@ export async function POST(req: Request) {
       // 翻訳元の言葉を入力
       const targetTextArray = splitArrayTextByNumber[i]
       const sourceLineCount = splitArrayTextByNumber[i].length
-      await page.getByRole('textbox', { name: '原文' }).fill(targetTextArray.join('\n'))
 
-      // 翻訳を待つ
-      try {
-        await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 3000 })
-      } catch (error) {
-        await page.waitForSelector('div[data-testid="translator-target-toolbar-share-popup"]', { state: 'attached' })
-      }
+      const translatedText = await getTranslateData(targetTextArray.join('\n'))
 
-      // 2回以上繰り返す場合は10秒待機
-      if (splitTextArray.length >= 2) await delay(10000)
-
-      // 翻訳されたテキストを取得
-      let translatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
-      await page.getByRole('textbox', { name: '訳文' }).fill('')
-      // テキストが取得できなかった場合に再取得する
-      const maxRetries = 10 // 最大リトライ回数
-
-      const retryGetSentenceArray = async (retryCount: number) => {
-        if (translatedText.length === 0 && retryCount < maxRetries) {
-          translatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
-          await delay(1000)
-          await retryGetSentenceArray(retryCount + 1) // リトライ回数をインクリメントして再試行
-        }
-      }
-
-      await retryGetSentenceArray(0) // リトライ回数を0で初期化して実行
-
-      const findFirstSimilarIndex = (arr: string[]): number => {
-        const lastIndex = arr.length - 1
-        const firstSimilarIndex = arr.findIndex((element, index) => {
-          if (index === lastIndex) return false
-          return arr.slice(index + 1).some(otherElement => element.slice(0, -1) === otherElement.slice(0, -1))
-        })
-        return firstSimilarIndex === 0 ? -1 : firstSimilarIndex
-      }
+      env.DEBUG && console.info(`translatedText`, translatedText)
 
       // 翻訳後のテキストに重複行があった場合に残りを再翻訳する
-      const translatedTextArray = translatedText.split(/\r\n|\n/)
-      const firstSimilarIndex = findFirstSimilarIndex(translatedTextArray)
+      const translatedTextArray = translatedText?.split(/\r\n|\n/)
 
-      if (firstSimilarIndex !== -1) {
-        const spliceLineNumber = firstSimilarIndex
-        targetTextArray.splice(0, spliceLineNumber)
-        translatedTextArray.splice(spliceLineNumber)
-        await page.getByTestId('translator-source-clear-button').click()
-        await page.getByRole('textbox', { name: '原文' }).fill(targetTextArray.join('\n'))
-        // 翻訳を待つ
-        try {
-          await page.waitForSelector('.lmt__loadingIndicator_container', { state: 'hidden', timeout: 3000 })
-        } catch (error) {
-          await page.waitForSelector('div[data-testid="translator-target-toolbar-share-popup"]', { state: 'attached' })
-        }
-        const retryTranslatedText = await page.$eval('.lmt__target_textarea', (el: HTMLTextAreaElement) => el.value)
-        const joinedTranslatedTextArray = [...translatedTextArray, ...retryTranslatedText.split(/\r\n|\n/)]
-
-        const maxLength = Math.max(joinedTranslatedTextArray.length, sourceLineCount)
-        const normalizedArray = joinedTranslatedTextArray.concat(
-          Array(maxLength - joinedTranslatedTextArray.length).fill('')
-        )
-        resultTranslatedTextArray.push(normalizedArray)
-      } else {
-        // 改行区切りの文字列配列に加工
-        const maxLength = Math.max(translatedTextArray.length, sourceLineCount)
-        const normalizedArray = translatedTextArray.concat(Array(maxLength - translatedTextArray.length).fill(''))
-        resultTranslatedTextArray.push(normalizedArray)
-      }
+      // 改行区切りの文字列配列に加工
+      const maxLength = Math.max(translatedTextArray.length, sourceLineCount)
+      const normalizedArray = translatedTextArray.concat(Array(maxLength - translatedTextArray.length).fill(''))
+      resultTranslatedTextArray.push(normalizedArray)
 
       // テキストをクリア
-      await page.getByTestId('translator-source-clear-button').click()
+      await delay(DELAY_MS)
     }
 
-    await page.close()
-    await context.close()
-    await browser.close()
-
+    env.DEBUG && console.info(`resultTranslatedTextArray`, resultTranslatedTextArray)
     const resultText = resultTranslatedTextArray.flat().join('\n')
+
+    env.DEBUG && console.info(`resultText`, resultText)
 
     return NextResponse.json({ text: resultText }, { status: 200 })
   } catch (error) {
+    console.error(error)
     return NextResponse.json({ error: 'An error occurred' }, { status: 500 })
+  }
+}
+
+async function getTranslateData(text: string, retries = 30) {
+  try {
+    const response = await fetch(`${env.DEEPL_SERVER_URL}/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        source_lang: 'EN',
+        target_lang: 'JA'
+      })
+    })
+
+    if (!response.ok && retries > 0) {
+      // 再試行可能な場合
+      console.info('再試行可能な場合')
+      await delay(DELAY_MS)
+      return await getTranslateData(text, retries - 1)
+    }
+
+    if (!response.ok && retries === 0) {
+      throw new Error('Failed to fetch translation data')
+    }
+
+    const { data: translatedText } = await response.json()
+    env.DEBUG && console.info(typeof translatedText, translatedText)
+    if (translatedText == null && retries > 0) {
+      // `data` が null で再試行可能な場合
+      await delay(DELAY_MS)
+      return await getTranslateData(text, retries - 1)
+    }
+    env.DEBUG && console.info(`getTranslateData translatedText`, translatedText)
+    return translatedText
+  } catch (error) {
+    if (retries > 0) {
+      // エラーが発生しても再試行可能な場合
+      return await getTranslateData(text, retries - 1)
+    }
+    env.DEBUG && console.error(error)
+    throw new Error('Failed to parse translation data')
   }
 }

@@ -38,7 +38,7 @@ export const srtTranslate = async ({ targetSubtitle }: { targetSubtitle: string 
   const contentArrayIndex: number[] = []
   const contentTextArray = originalSubtitle.map((text, index) => {
     if (RegExp(`^\\d{1,3}`, 'g').test(text) || text === '') {
-      return null
+      return
     } else {
       contentArrayIndex.push(index)
       return text
@@ -75,11 +75,11 @@ const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text
           method: 'POST',
           body: JSON.stringify({ text: currentPromise, original: 'en', exchange: 'ja' })
         })
-        if (!response.ok) return null
+        if (!response.ok) return
         const translatedText: { text: string } = await response.json()
         translateFinArray.push(translatedText)
       } catch (error) {
-        if (retryCount === 4) return null
+        if (retryCount === 4) return
         await retryRequest(retryCount + 1)
       }
     }
@@ -96,7 +96,7 @@ export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, 
 
 // 半角記号を全角へ変換
 export const toZenWidth = (strVal: string) => {
-  const zenVal = strVal.replaceAll(/[<>!@#$%^&*)(+=._-]/g, (tmpStr: string) =>
+  const zenVal = strVal.replace(/[<>!@#$%^&*)(+=._-]/g, (tmpStr: string) =>
     String.fromCharCode(tmpStr.charCodeAt(0) + 0xfee0)
   )
   // 文字コードシフトで対応できない文字の変換
