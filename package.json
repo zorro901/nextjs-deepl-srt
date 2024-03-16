@@ -9,7 +9,7 @@
     "lint": "eslint . --ext .ts,.js,.tsx,.jsx",
     "lint:fix": "eslint --fix . --ext .ts,.js,.tsx,.jsx",
     "format": "prettier --write .",
-    "prepare": "husky install",
+    "prepare": "husky",
     "postinstall": "npx -y force-resolutions && npx playwright install --with-deps chromium"
   },
   "lint-staged": {
@@ -36,7 +36,7 @@
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-react": "^7.32.2",
     "fs": "^0.0.2",
-    "husky": "^8.0.3",
+    "husky": "^9.0.11",
     "lint-staged": "^13.2.3",
     "playwright": "^1.35.1",
     "playwright-core": "^1.35.1",
