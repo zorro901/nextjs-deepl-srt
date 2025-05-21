@@ -27,7 +27,9 @@ export async function POST(req: Request) {
 
       const translatedText = await getTranslateData(targetTextArray.join('\n'))
 
-      env.DEBUG && console.info(`translatedText`, translatedText)
+      if (env.DEBUG) {
+        console.info(`translatedText`, translatedText)
+      }
 
       // 翻訳後のテキストに重複行があった場合に残りを再翻訳する
       const translatedTextArray = translatedText?.split(/\r\n|\n/)
@@ -41,10 +43,15 @@ export async function POST(req: Request) {
       await delay(DELAY_MS)
     }
 
-    env.DEBUG && console.info(`resultTranslatedTextArray`, resultTranslatedTextArray)
+    if (env.DEBUG) {
+      console.info(`resultTranslatedTextArray`, resultTranslatedTextArray)
+    }
+
     const resultText = resultTranslatedTextArray.flat().join('\n')
 
-    env.DEBUG && console.info(`resultText`, resultText)
+    if (env.DEBUG) {
+      console.info(`resultText`, resultText)
+    }
 
     return NextResponse.json({ text: resultText }, { status: 200 })
   } catch (error) {
@@ -77,20 +84,29 @@ async function getTranslateData(text: string, retries = 30) {
     }
 
     const { data: translatedText } = await response.json()
-    env.DEBUG && console.info(typeof translatedText, translatedText)
+    if (env.DEBUG) {
+      console.info(typeof translatedText, translatedText)
+    }
+
     if (translatedText == null && retries > 0) {
       // `data` が null で再試行可能な場合
       await delay(DELAY_MS)
       return await getTranslateData(text, retries - 1)
     }
-    env.DEBUG && console.info(`getTranslateData translatedText`, translatedText)
+    if (env.DEBUG) {
+      console.info(`getTranslateData translatedText`, translatedText)
+    }
+
     return translatedText
   } catch (error) {
     if (retries > 0) {
       // エラーが発生しても再試行可能な場合
       return await getTranslateData(text, retries - 1)
     }
-    env.DEBUG && console.error(error)
+    if (env.DEBUG) {
+      console.error(error)
+    }
+
     throw new Error('Failed to parse translation data')
   }
 }

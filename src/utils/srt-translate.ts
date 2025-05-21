@@ -78,7 +78,7 @@ const translateDeepL = async (targetStringArray: string[]): Promise<Record<'text
         if (!response.ok) return
         const translatedText: { text: string } = await response.json()
         translateFinArray.push(translatedText)
-      } catch (error) {
+      } catch {
         if (retryCount === 4) return
         await retryRequest(retryCount + 1)
       }
